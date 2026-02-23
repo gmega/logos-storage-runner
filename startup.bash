@@ -24,6 +24,7 @@ generate_config_file() {
   \"listen-addrs\": [\"/ip4/0.0.0.0/tcp/$listen_port\"]" > "${config_file}"
 
   if [ -n "$spr" ]; then
+    echo "" >> "${config_file}"
     echo -n ",\"bootstrap-node\": [\"$spr\"]" >> "${config_file}"
   fi
 
@@ -101,9 +102,12 @@ start_node 1 "${import_folder}"
 spr=$(await 10 get_spr 1)
 get_spr 1 | head -n 1
 
+#shellcheck disable=SC2012
+await 20 cid_count_ge 1 "$(ls -1 "${import_folder}" | wc -l)"
+
 generate_config_file 2 "$spr"
 start_node 2 "${import_folder}"
 
 #shellcheck disable=SC2012
-await 10 cid_count_ge 2 "$(ls -1 "${import_folder}" | wc -l)"
+await 20 cid_count_ge 2 "$(ls -1 "${import_folder}" | wc -l)"
 get_cids 2
