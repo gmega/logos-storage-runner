@@ -6,7 +6,7 @@ LIB_SRC=${LIB_SRC:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
 # shellcheck source=./utils.bash
 source "${LIB_SRC}/utils.bash"
 
-file_list=("$@")
+import_folder=$1
 
 generate_config_file() {
   local node_id=$1
@@ -20,6 +20,7 @@ generate_config_file() {
   \"data-dir\": \"${data}/storage-${node_id}\",
   \"disc-port\": $disc_port,
   \"nat\": \"none\",
+  \"log-level\": \"DEBUG\",
   \"listen-addrs\": [\"/ip4/0.0.0.0/tcp/$listen_port\"]" > "${config_file}"
 
   if [ -n "$spr" ]; then
@@ -55,34 +56,54 @@ start_node() {
   echo $! > "${pids}/storage-${node_id}.pid"
 }
 
-get_spr() {
-  local node_id=$1
-  local timeout=${2:-10}
-  local interval=${3:-1}
-  local start_time=$SECONDS
-  local spr
+await() {
+  local timeout=$1
+  shift 1
 
+  local start_time=$SECONDS
   while (( SECONDS - start_time < timeout )); do
-    spr=$(grep -e 'spr:[a-zA-Z0-9_-]\+' -o "${log}/storage-${node_id}.log" 2>/dev/null | head -n 1)
-    if [ -n "$spr" ]; then
-      echo "$spr"
-      echoerr "Bootstrap SPR is: ${spr}"
+    if "$@"; then
       return 0
     fi
-    sleep "$interval"
+    sleep 1
   done
 
-  echoerr "Timed out waiting for SPR on node ${node_id}"
+  echoerr "Timed out waiting for [${*}]"
 
   return 1
+}
+
+get_spr() {
+  local node_id=$1
+  grep -e 'spr:[a-zA-Z0-9_-]\+' -o "${log}/storage-${node_id}.log"
+}
+
+get_cids() {
+  local node_id=$1
+  grep -o 'cid= \\"[a-zA-Z0-9_-]\+' "${log}/storage-${node_id}.log" | cut -d '"' -f2
+}
+
+cid_count_ge() {
+  local node_id=$1
+  local expected=$2
+  local current
+  echoerr "Expecting at least $expected CIDs for node $node_id"
+  current=$(get_cids "$node_id" | wc -l)
+  echoerr "Found $current CIDs for node $node_id"
+  [ "$current" -ge "$expected" ]
 }
 
 init_folders
 
 generate_config_file 1
-start_node 1 "${file_list[@]}"
+start_node 1 "${import_folder}"
 
-spr=$(get_spr 1) || exit 1
+spr=$(await 10 get_spr 1)
+get_spr 1 | head -n 1
 
 generate_config_file 2 "$spr"
-start_node 2 "${file_list[@]}"
+start_node 2 "${import_folder}"
+
+#shellcheck disable=SC2012
+await 10 cid_count_ge 2 "$(ls -1 "${import_folder}" | wc -l)"
+get_cids 2
