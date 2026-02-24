@@ -15,3 +15,13 @@ init_folders() {
 cleanup_folders() {
   rm -rf "${config}" "${log}" "${data}" "${pids}"
 }
+
+killtree() {
+  local pid=$1
+  for child in $(ps -o pid= --ppid "$pid" 2>/dev/null); do
+    echoerr "Killing $child"
+    killtree "$child"
+  done
+  echoerr "Killing $pid"
+  kill "$pid" 2>/dev/null
+}

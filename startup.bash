@@ -1,4 +1,12 @@
 #!/usr/bin/env bash
+#
+# startup.bash: starts a k-node Logos Node network running the storage node.
+# By default, k = 2. It illustrates:
+#
+#  1. how to start and preconfigure a Logos node with storage on;
+#  2. how to bootstrap storage nodes from each other;
+#  3. how to pre-populate a storage node with files.
+#
 set -e -o pipefail
 
 LIB_SRC=${LIB_SRC:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
@@ -6,6 +14,7 @@ LIB_SRC=${LIB_SRC:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
 # shellcheck source=./utils.bash
 source "${LIB_SRC}/utils.bash"
 
+k=2 # Want more nodes? Increase this number.
 import_folder=$1
 
 generate_config_file() {
@@ -45,6 +54,9 @@ start_node() {
   commands+=('storage_module.start()')
 
   for file_path in "$@"; do
+    if [ -z "$file_path" ]; then
+      continue
+    fi
     commands+=("-c")
     commands+=("storage_module.importFiles(${file_path})")
   done
@@ -76,7 +88,7 @@ await() {
 
 get_spr() {
   local node_id=$1
-  grep -e 'spr:[a-zA-Z0-9_-]\+' -o "${log}/storage-${node_id}.log"
+  grep "udp" "${log}/storage-${node_id}.log" | grep -e 'spr:[a-zA-Z0-9_-]\+' -o | head -n 1
 }
 
 get_cids() {
@@ -96,18 +108,29 @@ cid_count_ge() {
 
 init_folders
 
-generate_config_file 1
-start_node 1 "${import_folder}"
+spr=""
 
-spr=$(await 10 get_spr 1)
-get_spr 1 | head -n 1
+echoerr "Starting a ${k}-node network."
 
-#shellcheck disable=SC2012
-await 20 cid_count_ge 1 "$(ls -1 "${import_folder}" | wc -l)"
+for ((i=1; i<=k; i++)); do
+  generate_config_file $i "$spr"
+  start_node $i "${import_folder}"
 
-generate_config_file 2 "$spr"
-start_node 2 "${import_folder}"
+  if [ $i -eq 1 ]; then
+    echoerr "Wait for bootstrap SPR."
+    spr=$(await 10 get_spr $i)
+    echoerr "SPR is: ${spr}"
+  fi
 
-#shellcheck disable=SC2012
-await 20 cid_count_ge 2 "$(ls -1 "${import_folder}" | wc -l)"
-get_cids 2
+  if [ -n "${import_folder}" ]; then
+    echoerr "Populate node $i with files from ${import_folder}."
+    #shellcheck disable=SC2012
+    await 10 cid_count_ge $i "$(ls -1 "${import_folder}" 2> /dev/null | wc -l)"
+
+    echoerr "CIDs for node $i:"
+    get_cids $i
+  else
+    echoerr "No import folder specified, so no files will be imported for node ${i}."
+  fi
+
+done
