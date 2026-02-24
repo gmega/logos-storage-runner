@@ -8,6 +8,18 @@ export config="${root}/config"
 export data="${root}/data"
 export pids="${root}/pids"
 
+find_binary() {
+  local path
+  echoerr "Finding binary ${1}."
+  path=$(find -L ~+ -iname "${1}")
+  if [ -z "$path" ]; then
+    echoerr "Binary ${1} not found. Have you built the project?"
+    exit 1
+  fi
+  echoerr "Found binary ${1} at ${path}."
+  echo "$path"
+}
+
 init_folders() {
   mkdir -p "${config}" "${log}" "${data}" "${pids}"
 }

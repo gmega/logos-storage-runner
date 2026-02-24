@@ -14,6 +14,11 @@ LIB_SRC=${LIB_SRC:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
 # shellcheck source=./utils.bash
 source "${LIB_SRC}/utils.bash"
 
+logos_host=$(find_binary logos_host)
+logos_core=$(find_binary logoscore)
+
+export LOGOS_HOST_PATH="$logos_host"
+
 k=2 # Want more nodes? Increase this number.
 import_folder=$1
 
@@ -61,7 +66,7 @@ start_node() {
     commands+=("storage_module.importFiles(${file_path})")
   done
 
-  ./logos/bin/logoscore\
+  "${logos_core}"\
     -m ./modules\
     --load-modules storage_module\
     "${commands[@]}" &> "${log}/storage-${node_id}.log" &
