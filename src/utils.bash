@@ -61,6 +61,11 @@ kill_all() {
   fi
 }
 
+is_dead() {
+  local pid=$1
+  kill -0 "$pid" 2>/dev/null
+}
+
 await() {
   local timeout=$1
   shift 1

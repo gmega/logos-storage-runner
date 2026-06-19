@@ -9,6 +9,8 @@ source "${LIB_SRC}/logos.bash"
 BASE_DISC_PORT=9090
 BASE_LISTEN_PORT=8080
 
+active_network=""
+
 sto_generate_config() {
   local node_id=$1
   local listen_port=$((node_id + BASE_LISTEN_PORT))
@@ -50,6 +52,10 @@ sto_start_node() {
   logos_cmd=$(logos_cli "$node_id")
 
   echoerr "Starting storage node ${node_id}"
+  if [[ ! -f "$config_file" ]]; then
+    echoerr "Config file $config_file not found. You must invoke sto_generate_config ${node_id} ... first"
+    return 1
+  fi
 
   ${logos_cmd} load-module storage_module
   sto_call "$node_id" init "@${config_file}"
@@ -64,6 +70,45 @@ sto_stop_node() {
   echoerr "Stopping node ${node_id}"
 
   ${logos_cmd} unload-module storage_module
+}
+
+sto_start_network() {
+  local k=$1
+  local follow_terminal=$2
+  local spr
+
+  init_folders
+
+  for ((i=1; i<=k; i++)); do
+    logos_start_node $i "$follow_terminal"
+    sleep 1
+    sto_generate_config $i "$spr"
+    sto_start_node $i
+    if [[ $i -eq 1 ]]; then
+      spr=$(sto_get_spr $i)
+      echoerr "Bootstrap SPR is ${spr}"
+    fi
+  done
+
+  active_network="$k"
+}
+
+sto_teardown_network() {
+  if [ -z "$active_network" ]; then
+    echoerr "No active network to teardown"
+    return 1
+  fi
+  echoerr "Tearing down network with ${active_network} nodes"
+
+  local k=$active_network
+  for ((i=1; i<=k; i++)); do
+    sto_stop_node $i
+    logos_stop_node $i
+  done
+
+  cleanup_folders
+
+  active_network=""
 }
 
 sto_import_files() {
