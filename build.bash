@@ -8,24 +8,42 @@ LIB_SRC=${LIB_SRC:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
 BUILD_OUTPUTS=$(realpath "./build")
 LOGOS_MODULES=$(realpath "./modules")
 
-build_all() {
-  mkdir -p "$BUILD_OUTPUTS" "$LOGOS_MODULES"
-
+build_logos_core_cli() {
   echo "Building the Logos Core CLI..."
   nix --extra-experimental-features "nix-command flakes"\
     build "github:logos-co/logos-logoscore-cli/${LOGOS_CLI}"\
     --out-link "$BUILD_OUTPUTS/logos"
+}
 
+build_logos_package_manager() {
   echo "Building the Logos Package Manager..."
   nix --extra-experimental-features "nix-command flakes"\
     build "github:logos-co/logos-package-manager/${LOGOS_PACKAGE_MANAGER}#cli"\
     --out-link "$BUILD_OUTPUTS/package-manager"
+}
 
+build_storage_module() {
   echo "Building the Storage Module..."
   nix --extra-experimental-features "nix-command flakes"\
     build "github:logos-co/logos-storage-module/${STORAGE_MODULE}#lgx"\
-    --override-input logos-storage "git+https://github.com/logos-storage/logos-storage-nim?ref=refs/tags/${STORAGE_LIBSTORAGE}&submodules=1"\
+    --override-input logos-storage "git+https://github.com/logos-storage/logos-storage-nim?ref=${STORAGE_LIBSTORAGE}&submodules=1"\
     --out-link "$BUILD_OUTPUTS/storage-module"
+}
+
+build_mix_tools() {
+  echo "Building mix tools..."
+  git clone --depth 1 --branch "$STORAGE_LIBSTORAGE" "https://github.com/logos-storage/logos-storage-nim" "$BUILD_OUTPUTS/logos-storage-nim"
+  cd "$BUILD_OUTPUTS/logos-storage-nim"
+  make update && make mix-tools
+}
+
+build_all() {
+  mkdir -p "$BUILD_OUTPUTS" "$LOGOS_MODULES"
+
+  build_logos_core_cli
+  build_logos_package_manager
+  build_storage_module
+  build_mix_tools
 
   mkdir -p "$LOGOS_MODULES"
 
@@ -38,6 +56,7 @@ build_all() {
 
 BUILD_OUTPUTS=$BUILD_OUTPUTS
 LOGOS_MODULES=$LOGOS_MODULES
+MIX_TOOLS=$BUILD_OUTPUTS/logos-storage-nim/build
 EOF
 
   echo "Done. Source the env.sh file to use the built components."
@@ -47,4 +66,8 @@ build_clean() {
   rm -rf "$BUILD_OUTPUTS" "$LOGOS_MODULES"
 }
 
-build_all
+if [[ ! $- =~ i ]]; then
+  build_all
+else
+  echo "Sourcing build.bash. No automatic build."
+fi
