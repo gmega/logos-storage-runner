@@ -1,13 +1,18 @@
-echoerr() { echo "$@" >&2; }
-
+#!/usr/bin/env bash
 LIB_SRC=${LIB_SRC:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
 
-root=$(realpath "${LIB_SRC}/../nodes")
-export root
+if [ -z "${RUNTIME_OUTPUTS}" ]; then
+  root=$(realpath "${LIB_SRC}/../nodes")
+else
+  root="${RUNTIME_OUTPUTS}"
+fi
+
 export log="${root}/log"
 export config="${root}/config"
 export data="${root}/data"
 export pids="${root}/pids"
+
+echoerr() { echo "$@" >&2; }
 
 init_folders() {
   mkdir -p "${config}" "${log}" "${data}" "${pids}"
@@ -17,7 +22,7 @@ cleanup_folders() {
   rm -rf "${config}" "${log}" "${data}" "${pids}"
 }
 
-launch_terminal() {
+util_spawn_terminal() {
   local title=$1
   shift
   # TODO: Use another terminal in OSX

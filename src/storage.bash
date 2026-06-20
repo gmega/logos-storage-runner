@@ -152,13 +152,3 @@ sto_cids() {
   local node_id=$1
   sto_call "$node_id" manifests | jq --raw-output '.result.value[].cid'
 }
-
-sto_cid_count_ge() {
-  local node_id=$1
-  local expected=$2
-  local current
-  echoerr "Expecting at least $expected CIDs for node $node_id"
-  current=$(sto_get_cids "$node_id" | wc -l)
-  echoerr "Found $current CIDs for node $node_id"
-  [ "$current" -ge "$expected" ]
-}

@@ -1,5 +1,4 @@
+build
 modules
-logos
-package-manager
-nodes
-testfiles
+runtime
+env.sh

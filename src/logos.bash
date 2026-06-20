@@ -3,9 +3,16 @@
 set -e -o pipefail
 
 LIB_SRC=${LIB_SRC:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
+
 # shellcheck source=./utils.bash
 source "${LIB_SRC}/utils.bash"
 
+if [ -z "${LOGOS_MODULES}" ]; then
+  echo "Error: LOGOS_MODULES not set."
+  exit 1
+fi
+
+logos_modules="${LOGOS_MODULES}"
 logos_core=$(find_binary logoscore)
 
 logos_cli() {
@@ -15,18 +22,18 @@ logos_cli() {
 
 logos_start_node() {
   local node_id=$1
-  local follow_terminal=$2
+  local spawn_terminal=$2
 
   local logos_cmd
   logos_cmd=$(logos_cli "$node_id")
 
   echoerr "Starting logoscore node ${node_id}"
 
-  ${logos_cmd} -D -m ./modules &> "${log}/logos-daemon-${node_id}.log" &
+  ${logos_cmd} -D -m "$logos_modules" &> "${log}/logos-daemon-${node_id}.log" &
   echo $! > "${pids}/logos-daemon-${node_id}.pid"
 
-  if [ "$follow_terminal" = true ]; then
-    launch_terminal "Node ${node_id}" tail -f "${log}/logos-daemon-${node_id}.log"
+  if [ "$spawn_terminal" = true ]; then
+    util_spawn_terminal "Node ${node_id}" tail -f "${log}/logos-daemon-${node_id}.log"
   fi
 }
 
