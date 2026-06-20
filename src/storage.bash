@@ -9,6 +9,8 @@ source "${LIB_SRC}/logos.bash"
 BASE_DISC_PORT=9090
 BASE_LISTEN_PORT=8080
 
+DEFAULT_BUFFER_SIZE=65536
+
 active_network=""
 
 sto_generate_config() {
@@ -126,24 +128,29 @@ sto_get_spr() {
 
 sto_debug() {
   local node_id=$1
+
   sto_call "$node_id" debug
 }
 
 sto_upload() {
   local node_id=$1
   local file_path=$2
-  sto_call "$node_id" uploadUrl "$file_path"
+
+  sto_call "$node_id" uploadUrl "$file_path" "$DEFAULT_BUFFER_SIZE"
 }
 
 sto_download() {
   local node_id=$1
   local cid=$2
   local output_path=$3
-  sto_call "$node_id" downloadToUrl "$cid" "$output_path" "false"
+  local local_download=${4:false}
+
+  sto_call "$node_id" downloadToUrl "$cid" "$output_path" "$local_download" "$DEFAULT_BUFFER_SIZE"
 }
 
 sto_cids() {
-  sto_call "$node_id" manifests | jq --raw-output 'result.value[].cid'
+  local node_id=$1
+  sto_call "$node_id" manifests | jq --raw-output '.result.value[].cid'
 }
 
 sto_cid_count_ge() {
