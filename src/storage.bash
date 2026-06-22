@@ -22,13 +22,19 @@ _sto_data_dir() {
 # Generates a storage node configuration file.
 # Arguments:
 #   $1: node_id - The node ID
-#   $2: spr - The SPR (optional)
+#   $2: bootstrap_spr - A boostrap SPR. Must contain a UDP address. (optional)
+#   $3-...: dht_proxy_sprs - SPRs for DHT proxies. Must contain TCP addresses. (optional)
 sto_generate_config() {
   local node_id=$1
   local listen_port=$((node_id + BASE_LISTEN_PORT))
   local disc_port=$((node_id + BASE_DISC_PORT))
-  local spr=$2
   local config_file="${config}/storage-config-${node_id}.json"
+  shift
+  local bootstrap_spr=$1
+  shift
+  local dht_proxy_sprs=("$@")
+
+  echoerr "Generate config for node $i"
 
   echo "{
   \"log-level\": \"DEBUG\",
@@ -38,15 +44,22 @@ sto_generate_config() {
   \"mix-enabled\": true,
   \"listen-port\": $listen_port," > "${config_file}"
 
-  if [ -n "$spr" ]; then
-    echo -n "\"bootstrap-node\": [\"$spr\"]" >> "${config_file}"
+  if [ -n "$bootstrap_spr" ]; then
+    echo "  \"bootstrap-node\": [\"${bootstrap_spr}\"]," >> "${config_file}"
   else
-    echo -n "\"no-bootstrap-node\": true" >> "${config_file}"
+    echo -n "  \"no-bootstrap-node\": true" >> "${config_file}"
+  fi
+
+  if [ ${#dht_proxy_sprs[@]} -gt 0 ]; then
+    local proxy_list
+    proxy_list=$(printf '    "%s",\n' "${dht_proxy_sprs[@]}")
+    proxy_list=${proxy_list%,} # remove trailing comma
+    printf "  \"dht-mix-proxy\": [\n%s\n  ]" "$proxy_list" >> "${config_file}"
   fi
 
   if [[ -f "${config}/mix-pool.json" ]]; then
     echo "," >> "${config_file}"
-    echo "\"mix-pool\": \"${config}/mix-pool.json\"" >> "${config_file}"
+    echo "  \"mix-pool\": \"${config}/mix-pool.json\"" >> "${config_file}"
   fi
 
   echo -e "\n}" >> "${config_file}"
@@ -88,12 +101,18 @@ sto_start_node() {
 
   if [[ "$is_relay" == "true" ]]; then
     echoerr "Export mix info for node ${node_id}"
-    "$MIX_TOOLS/mix_pool" export\
-      --pool="${config}/mix-pool.json"\
-      --data-dir="$(_sto_data_dir "$node_id")"\
-      --listen-ip="127.0.0.1"\
-      --listen-port=$((node_id + BASE_LISTEN_PORT))
+    sto_mix_insert "$node_id"
   fi
+}
+
+sto_mix_insert() {
+  await 10 file_lock_acquire "${config}/mix-pool.json.lock"
+  "$MIX_TOOLS/mix_pool" export\
+    --pool="${config}/mix-pool.json"\
+    --data-dir="$(_sto_data_dir "$node_id")"\
+    --listen-ip="127.0.0.1"\
+    --listen-port=$((node_id + BASE_LISTEN_PORT))
+  file_lock_release "${config}/mix-pool.json.lock"
 }
 
 # Stops a storage node within a logos node. Unloads the module.
@@ -117,34 +136,39 @@ sto_stop_node() {
 #   $3: follow_terminal - Whether to spawn a terminal containing the logs
 #                         for each node or not
 sto_start_network() {
-  local storage=$1
-  local mix=$2
-  local follow_terminal=$3
+  local mix=$1
+  local storage=$2
+  local spawn_terminal=$3
   local k=$((storage + mix))
+
+  local dht_proxy_sprs=()
+  local bootstrap_spr
 
   init_folders
 
-  for ((i=1; i<=k; i++)); do
-    logos_start_node $i "$follow_terminal"
-    sleep 1
-    if [[ $i -eq 1 ]]; then
-      spr=$(sto_get_spr $i)
-      echoerr "Bootstrap SPR is ${spr}"
-    fi
+  echoerr "Starting Logos Storage network with $k nodes:"
+  echoerr "  * Storage nodes: $storage"
+  echoerr "  * Mix nodes: $mix"
 
-    sto_generate_config $i "$spr"
+  for ((i=1; i<=k; i++)); do
+    logos_start_node $i "$spawn_terminal"
+    sleep 1 # I have no good readiness predicate for logos core
+
+    sto_generate_config $i "$bootstrap_spr" "${dht_proxy_sprs[@]}"
     # First nodes are mix/dht relay nodes.
     if [[ $i -le $mix ]]; then
-      sto_start_node $i true "$follow_terminal"
+      sto_start_node $i true
+      dht_proxy_sprs+=("$(sto_get_spr $i "tcp")")
     else
-      sto_start_node $i false "$follow_terminal"
+      sto_start_node $i false
+    fi
+
+    if [[ $i -eq 1 ]]; then
+      bootstrap_spr=$(sto_get_spr $i "udp")
     fi
   done
 
-  echoerr "Started network: "
-  echoerr "* Nodes (0-${mix}): mix nodes"
-  echoerr "* Nodes (${mix + 1}-${k}): storage nodes"
-
+  echo "Network started."
   active_mix=$mix
   active_storage=$storage
 }
@@ -189,8 +213,17 @@ sto_import_files() {
 # Arguments:
 #   $1: node_id - The node ID
 sto_get_spr() {
-  local node_id=$1
-  sto_call "$node_id" spr | jq --raw-output .result.value
+  local node_id=$1 spr_type=$2
+
+  if [ -z "$spr_type" ]; then
+    spr_type="udp"
+  fi
+
+  if [ "$spr_type" = "udp" ]; then
+    sto_call "$node_id" debug | jq --raw-output .result.value.spr
+  else
+    sto_call "$node_id" debug | jq --raw-output .result.value.providerRecord
+  fi
 }
 
 # Gets debug information for a storage node.
@@ -236,6 +269,12 @@ sto_download() {
   fi
 
   sto_call "$node_id" downloadToUrl "$cid" "$output_path" "$local_download" "$DEFAULT_BUFFER_SIZE"
+}
+
+sto_toggle_mix() {
+  local node_id=$1
+
+  sto_call "$node_id" togglePrivateQueries true
 }
 
 # Gets the CIDs of all files in a storage node.

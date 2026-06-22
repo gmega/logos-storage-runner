@@ -87,3 +87,18 @@ await() {
 
   return 1
 }
+
+file_lock_acquire() {
+  local lock_file="${1}.lock"
+  if [ -f "$lock_file" ]; then
+    # Acquire failed, returns.
+    return 1
+  fi
+  touch "$lock_file"
+  return 0
+}
+
+file_lock_release() {
+  local lock_file="${1}.lock"
+  rm "$lock_file"
+}

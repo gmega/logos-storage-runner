@@ -37,18 +37,20 @@ build_mix_tools() {
   make update && make mix-tools
 }
 
+build_install_storage_module() {
+  mkdir -p "$LOGOS_MODULES"
+  echo "Installing the Storage Module..."
+  "$BUILD_OUTPUTS/package-manager/bin/lgpm" --modules-dir "$LOGOS_MODULES" install --dir "$BUILD_OUTPUTS/storage-module"
+}
+
 build_all() {
-  mkdir -p "$BUILD_OUTPUTS" "$LOGOS_MODULES"
+  mkdir -p "$BUILD_OUTPUTS"
 
   build_logos_core_cli
   build_logos_package_manager
   build_storage_module
   build_mix_tools
-
-  mkdir -p "$LOGOS_MODULES"
-
-  echo "Installing the Storage Module..."
-  "$BUILD_OUTPUTS/package-manager/bin/lgpm" --modules-dir "$LOGOS_MODULES" install --dir "$BUILD_OUTPUTS/storage-module"
+  build_install_storage_module
 
   cat <<EOF > "./env.sh"
 #!/usr/bin/env bash
@@ -67,7 +69,11 @@ build_clean() {
 }
 
 if [[ ! $- =~ i ]]; then
-  build_all
+  if [[ "$1" == "clean" ]]; then
+    build_clean
+  else
+    build_all
+  fi
 else
   echo "Sourcing build.bash. No automatic build."
 fi

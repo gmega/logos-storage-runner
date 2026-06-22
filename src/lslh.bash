@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+#
+# lsnlh - Logos Storage Node Local Harness
+#
 LIB_SRC=${LIB_SRC:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}
 
 if [ ! -f "$LIB_SRC/../env.sh" ]; then
@@ -22,4 +25,7 @@ if [[ $- =~ i ]]; then
   set +e
 fi
 
-
+reload() {
+  echo "Reloading..."
+  source "$LIB_SRC/lslh.bash"
+}
