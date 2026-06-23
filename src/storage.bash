@@ -242,13 +242,40 @@ sto_debug() {
 sto_upload() {
   local node_id=$1
   local file_path=$2
+  local file_name
+  file_name=$(basename "$file_path")
 
   if ! _sto_is_storage "$node_id"; then
     echoerr "Node $node_id is not a storage node"
     return 1
   fi
 
-  sto_call "$node_id" uploadUrl "$file_path" "$DEFAULT_BUFFER_SIZE"
+  sto_call "$node_id" uploadUrl "$file_path" "$DEFAULT_BUFFER_SIZE" > /dev/null
+  await 5 _sto_is_not_none sto_manifest "$node_id" "$file_name"
+  sto_cid "$node_id" "$file_name"
+}
+
+sto_manifests() {
+  local node_id=$1
+  sto_call "$node_id" manifests | jq .
+}
+
+sto_manifest() {
+  local node_id=$1
+  local file_name=$2
+
+  sto_call "$node_id" manifests | jq --raw-output ".result.value[] | select(.filename == \"$file_name\")"
+}
+
+sto_manifest_by_cid() {
+  local node_id=$1
+  local cid=$2
+
+  sto_call "$node_id" manifests | jq --raw-output ".result.value[] | select(.cid == \"$cid\")"
+}
+
+sto_cid() {
+  sto_manifest "$@" | jq --raw-output '.cid'
 }
 
 # Downloads a file from a storage node.
@@ -261,28 +288,39 @@ sto_download() {
   local node_id=$1
   local cid=$2
   local output_path=$3
-  local local_download=${4:false}
+  local local_download=${4:-false}
 
   if ! _sto_is_storage "$node_id"; then
     echoerr "Node $node_id is not a storage node"
     return 1
   fi
 
+  echoerr "Downloading to ${output_path}."
+  echo sto_call "$node_id" downloadToUrl "$cid" "$output_path" "$local_download" "$DEFAULT_BUFFER_SIZE"
   sto_call "$node_id" downloadToUrl "$cid" "$output_path" "$local_download" "$DEFAULT_BUFFER_SIZE"
+
+  # Wait till we fetch the manifest.
+  await 5 _sto_is_not_none sto_manifest_by_cid "$node_id" "$cid"
+  echoerr "Got manifest, download started successfuly."
 }
 
-sto_toggle_mix() {
+sto_await_download() {
+  local node_id=$1
+  local cid=$2
+  local output_path=$3
+  local expected_size
+  expected_size=$(sto_manifest_by_cid "$node_id" "$cid" | jq '.datasetSize')
+
+  # Download is over when size matches. Unfortunately we get no feedback on
+  # failures, so things will just hang.
+  await INFINITY sto_size_matches "$output_path" "$expected_size"
+  echoerr "Download completed."
+}
+
+sto_enable_mix() {
   local node_id=$1
 
   sto_call "$node_id" togglePrivateQueries true
-}
-
-# Gets the CIDs of all files in a storage node.
-# Arguments:
-#   $1: node_id - The node ID
-sto_cids() {
-  local node_id=$1
-  sto_call "$node_id" manifests | jq --raw-output '.result.value[].cid'
 }
 
 # Checks if a storage node is ready.
@@ -298,4 +336,19 @@ _sto_is_storage() {
   local node_id=$1
   local first_index=$((active_mix + 1))
   [[ $node_id -ge $first_index ]]
+}
+
+_sto_is_not_none() {
+  result=$("$@")
+  [ -n "$result" ]
+}
+
+sto_size_matches() {
+  local output_path=$1
+  local expected_size=$2
+  local actual_size
+
+  actual_size=$(stat -c %s "$output_path")
+  echoerr "Completed: $actual_size/$expected_size"
+  [ "$actual_size" -eq "$expected_size" ]
 }
