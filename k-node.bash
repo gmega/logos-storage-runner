@@ -38,4 +38,6 @@ for i in $(seq 1 $N_EXPERIMENTS); do
   echo "Done running experiment ${i}."
 done
 
+sto_teardown_network
+
 echoerr "Success."
