@@ -1,8 +1,8 @@
 #!/usr/bin/bash
 
-N_MIX=5
-N_STORAGE=10
-N_EXPERIMENTS=1
+N_MIX=${1:-5}
+N_STORAGE=${2:-10}
+N_EXPERIMENTS=${3:-1}
 
 source "./src/lslh.bash"
 
