@@ -75,12 +75,16 @@ await() {
   local timeout=$1
   shift 1
 
+  if [ "$timeout" = "INFINITY" ]; then
+    timeout=999999999
+  fi
+
   local start_time=$SECONDS
   while (( SECONDS - start_time < timeout )); do
     if "$@"; then
       return 0
     fi
-    sleep 1
+    sleep 0.3
   done
 
   echoerr "Timed out waiting for [${*}]"
@@ -101,4 +105,28 @@ file_lock_acquire() {
 file_lock_release() {
   local lock_file="${1}.lock"
   rm "$lock_file"
+}
+
+randint() {
+  local min=$1
+  local max=$2
+  echo $((RANDOM % (max - min + 1) + min))
+}
+
+genfile() {
+  local size=$1
+  local filename
+  filename=$(mktemp)
+  dd if=/dev/urandom of="$filename" bs=1M count="$size" 2>/dev/null
+  echo "$filename"
+}
+
+sha1_equals() {
+  local file1=$1
+  local file2=$2
+  local sha1_1
+  local sha1_2
+  sha1_1=$(sha1sum "$file1" | cut -d' ' -f1)
+  sha1_2=$(sha1sum "$file2" | cut -d' ' -f1)
+  [ "$sha1_1" = "$sha1_2" ]
 }
