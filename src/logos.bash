@@ -20,6 +20,11 @@ logos_cli() {
   echo "${logos_core} --config-dir=${config}/logoscore-${node_id}"
 }
 
+logos_log() {
+  local node_id=$1
+  echo "${log}/logos-daemon-${node_id}.log"
+}
+
 logos_start_node() {
   local node_id=$1
   local spawn_terminal=$2
@@ -29,11 +34,11 @@ logos_start_node() {
 
   echoerr "Starting logoscore node ${node_id}"
 
-  ${logos_cmd} -D -m "$logos_modules" &> "${log}/logos-daemon-${node_id}.log" &
+  ${logos_cmd} -D -m "$logos_modules" &> "$(logos_log "$node_id")" &
   echo $! > "${pids}/logos-daemon-${node_id}.pid"
 
   if [ "$spawn_terminal" = true ]; then
-    util_spawn_terminal "Node ${node_id}" tail -f "${log}/logos-daemon-${node_id}.log"
+    util_spawn_terminal "Node ${node_id}" tail -f "$(logos_log "$node_id")"
   fi
 }
 

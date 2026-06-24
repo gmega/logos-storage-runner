@@ -14,6 +14,8 @@ DEFAULT_BUFFER_SIZE=65536
 active_mix=0
 active_storage=0
 
+mix_helper="python $(find_binary 'mix_helper.py')"
+
 _sto_data_dir() {
   local node_id=$1
   echo "${data}/storage-${node_id}"
@@ -106,12 +108,17 @@ sto_start_node() {
 }
 
 sto_mix_insert() {
+  local node_id=$1
   await 10 file_lock_acquire "${config}/mix-pool.json.lock"
-  "$MIX_TOOLS/mix_pool" export\
-    --pool="${config}/mix-pool.json"\
-    --data-dir="$(_sto_data_dir "$node_id")"\
-    --listen-ip="127.0.0.1"\
-    --listen-port=$((node_id + BASE_LISTEN_PORT))
+  sto_debug "${node_id}" | ${mix_helper} export --output "${config}/mix-${node_id}.json"
+
+  if [[ -f "${config}/mix-pool.json" ]]; then
+    ${mix_helper} merge "${config}/mix-${node_id}.json" "${config}/mix-pool.json"\
+      --output "${config}/mix-pool.json.tmp"
+    mv "${config}/mix-pool.json.tmp" "${config}/mix-pool.json"
+  else
+    cp "${config}/mix-${node_id}.json" "${config}/mix-pool.json"
+  fi
   file_lock_release "${config}/mix-pool.json.lock"
 }
 
@@ -323,13 +330,11 @@ sto_enable_mix() {
   sto_call "$node_id" togglePrivateQueries true
 }
 
-# Checks if a storage node is ready.
-# Arguments:
-#   $1: node_id - The node ID
+# Checks if the node's log contains "Storage Node Ready"
 sto_node_ready() {
-  local node_id=$1 spr
-  spr=$(sto_call "$node_id" spr)
-  [[ -n "$spr" ]]
+  local node_id=$1 logfile
+  logfile=$(logos_log "$node_id")
+  grep -q "Started Storage node" "$logfile"
 }
 
 _sto_is_storage() {

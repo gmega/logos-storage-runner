@@ -30,13 +30,6 @@ build_storage_module() {
     --out-link "$BUILD_OUTPUTS/storage-module"
 }
 
-build_mix_tools() {
-  echo "Building mix tools..."
-  git clone --depth 1 --branch "$STORAGE_LIBSTORAGE" "https://github.com/logos-storage/logos-storage-nim" "$BUILD_OUTPUTS/logos-storage-nim"
-  cd "$BUILD_OUTPUTS/logos-storage-nim"
-  make update && make mix-tools
-}
-
 build_install_storage_module() {
   mkdir -p "$LOGOS_MODULES"
   echo "Installing the Storage Module..."
@@ -49,7 +42,6 @@ build_all() {
   build_logos_core_cli
   build_logos_package_manager
   build_storage_module
-  build_mix_tools
   build_install_storage_module
 
   cat <<EOF > "./env.sh"
@@ -58,7 +50,6 @@ build_all() {
 
 BUILD_OUTPUTS=$BUILD_OUTPUTS
 LOGOS_MODULES=$LOGOS_MODULES
-MIX_TOOLS=$BUILD_OUTPUTS/logos-storage-nim/build
 EOF
 
   echo "Done. Source the env.sh file to use the built components."
